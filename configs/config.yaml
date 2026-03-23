@@ -1,0 +1,21 @@
+dataset:
+  root: ./data
+  mean: [0.5, 0.5, 0.5]
+  std: [0.5, 0.5, 0.5]
+
+model:
+  num_classes: 10
+
+training:
+  device: cuda
+  batch_size: 128
+  epochs: 10
+  num_workers: 2
+
+optimizer:
+  lr: 0.001
+  weight_decay: 0.0
+
+paths:
+  models_dir: outputs/models
+  logs_dir: outputs/logs
