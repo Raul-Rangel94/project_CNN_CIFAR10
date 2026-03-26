@@ -8,9 +8,10 @@ import yaml
 from torch import nn, optim
 
 from src.data.dataset import get_cifar10_dataloaders
-from src.models.cnn import Cifar10CNN
+from src.models.cnn import build_model
 from src.train.eval import evaluate
 from src.utils.metrics import batch_accuracy
+import torch.optim.lr_scheduler as lr_scheduler
 
 
 def load_config(config_path: str):
@@ -85,6 +86,7 @@ def append_training_log(log_path: Path, run_id: str, epoch: int, total_epochs: i
 def append_training_summary(
     summary_path: Path,
     run_id: str,
+    model_name: str,
     total_epochs: int,
     learning_rate: float,
     batch_size: int,
@@ -105,6 +107,7 @@ def append_training_summary(
             writer.writerow(
                 [
                     "run_id",
+                    "model_name",
                     "total_epochs",
                     "learning_rate",
                     "batch_size",
@@ -123,6 +126,7 @@ def append_training_summary(
         writer.writerow(
             [
                 run_id,
+                model_name,
                 total_epochs,
                 learning_rate,
                 batch_size,
@@ -140,12 +144,13 @@ def append_training_summary(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train CIFAR-10 CNN")
+    parser = argparse.ArgumentParser(description="Train CIFAR-10 model")
     parser.add_argument("--config", default="configs/config.yaml", help="Path to YAML config")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
     device = torch.device(cfg["training"]["device"] if torch.cuda.is_available() else "cpu")
+    model_name = cfg["model"]["name"]
 
     train_loader, test_loader = get_cifar10_dataloaders(
         data_dir=cfg["dataset"]["root"],
@@ -155,13 +160,19 @@ def main():
         std=tuple(cfg["dataset"]["std"]),
     )
 
-    model = Cifar10CNN(num_classes=cfg["model"]["num_classes"]).to(device)
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+    model = build_model(
+        model_name=model_name,
+        num_classes=cfg["model"]["num_classes"],
+    ).to(device)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.05)
     optimizer = optim.Adam(
         model.parameters(),
         lr=cfg["optimizer"]["lr"],
         weight_decay=cfg["optimizer"]["weight_decay"],
     )
+
+    # Initialize the scheduler
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
 
     models_dir, logs_dir = ensure_outputs(cfg["paths"])
     best_accuracy = 0.0
@@ -173,11 +184,16 @@ def main():
     final_train_metrics = None
     final_val_metrics = None
 
+    print(f"Run {run_id} | Model: {model_name} | Device: {device}")
+
     for epoch in range(1, total_epochs + 1):
         train_metrics = train_one_epoch(model, train_loader, optimizer, criterion, device)
         val_metrics = evaluate(model, test_loader, device, criterion)
         final_train_metrics = train_metrics
         final_val_metrics = val_metrics
+
+        # Step the scheduler at the end of each epoch.
+        scheduler.step()
 
         append_training_log(log_path, run_id, epoch, total_epochs, train_metrics, val_metrics)
 
@@ -198,11 +214,12 @@ def main():
     append_training_summary(
         summary_path,
         run_id,
+        model_name,
         total_epochs,
         cfg["optimizer"]["lr"],
         cfg["training"]["batch_size"],
         cfg["optimizer"]["weight_decay"],
-        all(hasattr(model, layer_name) for layer_name in ("bn1", "bn2", "bn3")),
+        any(isinstance(module, nn.BatchNorm2d) for module in model.modules()),
         getattr(getattr(model, "dropout", None), "p", 0.0),
         best_accuracy,
         best_epoch,

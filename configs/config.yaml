@@ -1,15 +1,16 @@
 dataset:
   root: ./data
-  mean: [0.5, 0.5, 0.5]
-  std: [0.5, 0.5, 0.5]
+  mean: [0.4914, 0.4822, 0.4465]
+  std: [0.247, 0.243, 0.261]
 
 model:
+  name: cnn
   num_classes: 10
 
 training:
   device: cuda
   batch_size: 128
-  epochs: 10
+  epochs: 20
   num_workers: 2
 
 optimizer:
