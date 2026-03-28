@@ -1,5 +1,6 @@
 import argparse
 import csv
+import numpy as np
 from datetime import datetime
 from pathlib import Path
 
@@ -28,9 +29,10 @@ def train_one_epoch(model, loader, optimizer, criterion, device):
         images = images.to(device)
         labels = labels.to(device)
 
+        mixed_images, labels_a, labels_b, lam = mixup_data(images, labels, alpha=0.2, device=device)
         optimizer.zero_grad()
-        logits = model(images)
-        loss = criterion(logits, labels)
+        logits = model(mixed_images)
+        loss = criterion(logits, labels_a) * lam + criterion(logits, labels_b) * (1 - lam)
         loss.backward()
         optimizer.step()
 
@@ -42,6 +44,19 @@ def train_one_epoch(model, loader, optimizer, criterion, device):
         "accuracy": 100.0 * running_acc / len(loader),
     }
 
+def mixup_data(x, y, alpha=0.2):
+    if alpha > 0:
+        lam = np.random.beta(alpha, alpha)
+    else:
+        lam = 1
+
+    batch_size = x.size(0)
+    index = torch.randperm(batch_size).to(x.device)
+
+    mixed_x = lam * x + (1 - lam) * x[index]
+    y_a, y_b = y, y[index]
+
+    return mixed_x, y_a, y_b, lam
 
 def ensure_outputs(paths_cfg):
     models_dir = Path(paths_cfg["models_dir"])
@@ -164,7 +179,7 @@ def main():
         model_name=model_name,
         num_classes=cfg["model"]["num_classes"],
     ).to(device)
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.05)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.02)
     optimizer = optim.Adam(
         model.parameters(),
         lr=cfg["optimizer"]["lr"],
@@ -172,8 +187,10 @@ def main():
     )
 
     # Initialize the scheduler
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
-
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=40
+    )
     models_dir, logs_dir = ensure_outputs(cfg["paths"])
     best_accuracy = 0.0
     best_epoch = 0

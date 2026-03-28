@@ -10,7 +10,7 @@ model:
 training:
   device: cuda
   batch_size: 128
-  epochs: 20
+  epochs: 40
   num_workers: 2
 
 optimizer:
