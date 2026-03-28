@@ -4,7 +4,7 @@ dataset:
   std: [0.247, 0.243, 0.261]
 
 model:
-  name: cnn
+  name: resnet_lite
   num_classes: 10
 
 training:
