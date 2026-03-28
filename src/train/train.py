@@ -29,7 +29,7 @@ def train_one_epoch(model, loader, optimizer, criterion, device):
         images = images.to(device)
         labels = labels.to(device)
 
-        mixed_images, labels_a, labels_b, lam = mixup_data(images, labels, alpha=0.2, device=device)
+        mixed_images, labels_a, labels_b, lam = mixup_data(images, labels, alpha=0.2)
         optimizer.zero_grad()
         logits = model(mixed_images)
         loss = criterion(logits, labels_a) * lam + criterion(logits, labels_b) * (1 - lam)
@@ -37,7 +37,7 @@ def train_one_epoch(model, loader, optimizer, criterion, device):
         optimizer.step()
 
         running_loss += loss.item()
-        running_acc += batch_accuracy(logits, labels)
+        running_acc += batch_accuracy(logits, labels_a)
 
     return {
         "loss": running_loss / len(loader),
@@ -179,7 +179,7 @@ def main():
         model_name=model_name,
         num_classes=cfg["model"]["num_classes"],
     ).to(device)
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.02)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.00)
     optimizer = optim.Adam(
         model.parameters(),
         lr=cfg["optimizer"]["lr"],
@@ -189,7 +189,7 @@ def main():
     # Initialize the scheduler
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer,
-        T_max=40
+        T_max=total_epochs
     )
     models_dir, logs_dir = ensure_outputs(cfg["paths"])
     best_accuracy = 0.0
