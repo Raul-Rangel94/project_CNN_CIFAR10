@@ -163,7 +163,7 @@ def main():
         model_name=model_name,
         num_classes=cfg["model"]["num_classes"],
     ).to(device)
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.00)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.02)
     optimizer = optim.Adam(
         model.parameters(),
         lr=cfg["optimizer"]["lr"],
@@ -173,7 +173,7 @@ def main():
     # Initialize the scheduler
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer,
-        T_max=total_epochs
+        T_max=40
     )
     models_dir, logs_dir = ensure_outputs(cfg["paths"])
     best_accuracy = 0.0
