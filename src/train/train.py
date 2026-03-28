@@ -1,6 +1,5 @@
 import argparse
 import csv
-import numpy as np
 from datetime import datetime
 from pathlib import Path
 
@@ -29,34 +28,19 @@ def train_one_epoch(model, loader, optimizer, criterion, device):
         images = images.to(device)
         labels = labels.to(device)
 
-        mixed_images, labels_a, labels_b, lam = mixup_data(images, labels, alpha=0.2)
         optimizer.zero_grad()
-        logits = model(mixed_images)
-        loss = criterion(logits, labels_a) * lam + criterion(logits, labels_b) * (1 - lam)
+        logits = model(images)
+        loss = criterion(logits, labels)
         loss.backward()
         optimizer.step()
 
         running_loss += loss.item()
-        running_acc += batch_accuracy(logits, labels_a)
+        running_acc += batch_accuracy(logits, labels)
 
     return {
         "loss": running_loss / len(loader),
         "accuracy": 100.0 * running_acc / len(loader),
     }
-
-def mixup_data(x, y, alpha=0.2):
-    if alpha > 0:
-        lam = np.random.beta(alpha, alpha)
-    else:
-        lam = 1
-
-    batch_size = x.size(0)
-    index = torch.randperm(batch_size).to(x.device)
-
-    mixed_x = lam * x + (1 - lam) * x[index]
-    y_a, y_b = y, y[index]
-
-    return mixed_x, y_a, y_b, lam
 
 def ensure_outputs(paths_cfg):
     models_dir = Path(paths_cfg["models_dir"])
