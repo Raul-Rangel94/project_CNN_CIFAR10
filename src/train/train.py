@@ -3,6 +3,7 @@ import csv
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import torch
 import yaml
 from torch import nn, optim
@@ -19,6 +20,20 @@ def load_config(config_path: str):
         return yaml.safe_load(file)
 
 
+def mixup_data(x, y, alpha=0.2):
+    if alpha > 0:
+        lam = np.random.beta(alpha, alpha)
+    else:
+        lam = 1.0
+
+    batch_size = x.size(0)
+    index = torch.randperm(batch_size, device=x.device)
+
+    mixed_x = lam * x + (1 - lam) * x[index]
+    y_a, y_b = y, y[index]
+    return mixed_x, y_a, y_b, lam
+
+
 def train_one_epoch(model, loader, optimizer, criterion, device):
     model.train()
     running_loss = 0.0
@@ -27,15 +42,16 @@ def train_one_epoch(model, loader, optimizer, criterion, device):
     for images, labels in loader:
         images = images.to(device)
         labels = labels.to(device)
+        mixed_images, y_a, y_b, lam = mixup_data(images, labels, alpha=0.2)
 
         optimizer.zero_grad()
-        logits = model(images)
-        loss = criterion(logits, labels)
+        logits = model(mixed_images)
+        loss = lam * criterion(logits, y_a) + (1 - lam) * criterion(logits, y_b)
         loss.backward()
         optimizer.step()
 
         running_loss += loss.item()
-        running_acc += batch_accuracy(logits, labels)
+        running_acc += lam * batch_accuracy(logits, y_a) + (1 - lam) * batch_accuracy(logits, y_b)
 
     return {
         "loss": running_loss / len(loader),
@@ -163,7 +179,7 @@ def main():
         model_name=model_name,
         num_classes=cfg["model"]["num_classes"],
     ).to(device)
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.02)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.00)
     optimizer = optim.Adam(
         model.parameters(),
         lr=cfg["optimizer"]["lr"],

@@ -71,7 +71,6 @@ class Cifar10ResNet(nn.Module):
 
         # Head
         self.gap = nn.AdaptiveAvgPool2d((1, 1))
-        self.dropout = nn.Dropout(0.1)
         self.fc = nn.Linear(128, num_classes)
 
     def forward(self, x):
@@ -92,7 +91,6 @@ class Cifar10ResNet(nn.Module):
 
         x = self.gap(x)
         x = torch.flatten(x, 1)
-        x = self.dropout(x)
 
         return self.fc(x)
 
