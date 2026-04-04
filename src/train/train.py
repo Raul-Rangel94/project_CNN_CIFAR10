@@ -196,7 +196,7 @@ def main():
         model_name=model_name,
         num_classes=cfg["model"]["num_classes"],
     ).to(device)
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.02)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.00)
     optimizer = optim.Adam(
         model.parameters(),
         lr=cfg["optimizer"]["lr"],
