@@ -3,6 +3,7 @@ import csv
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import torch
 import yaml
 from torch import nn, optim
@@ -18,6 +19,38 @@ def load_config(config_path: str):
     with open(config_path, "r", encoding="utf-8") as file:
         return yaml.safe_load(file)
 
+
+def rand_bbox(size, lam):
+    _, _, height, width = size
+    cut_rat = np.sqrt(1.0 - lam)
+    cut_w = int(width * cut_rat)
+    cut_h = int(height * cut_rat)
+
+    cx = np.random.randint(width)
+    cy = np.random.randint(height)
+
+    bbx1 = int(np.clip(cx - cut_w // 2, 0, width))
+    bby1 = int(np.clip(cy - cut_h // 2, 0, height))
+    bbx2 = int(np.clip(cx + cut_w // 2, 0, width))
+    bby2 = int(np.clip(cy + cut_h // 2, 0, height))
+    return bbx1, bby1, bbx2, bby2
+
+
+def cutmix_data(x, y, alpha=1.0):
+    lam = np.random.beta(alpha, alpha) if alpha > 0 else 1.0
+    index = torch.randperm(x.size(0), device=x.device)
+
+    y_a, y_b = y, y[index]
+    bbx1, bby1, bbx2, bby2 = rand_bbox(x.size(), lam)
+
+    mixed_x = x.clone()
+    mixed_x[:, :, bbx1:bbx2, bby1:bby2] = x[index, :, bbx1:bbx2, bby1:bby2]
+
+    height, width = x.size(2), x.size(3)
+    lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (height * width))
+    return mixed_x, y_a, y_b, lam
+
+
 def train_one_epoch(model, loader, optimizer, criterion, device):
     model.train()
     running_loss = 0.0
@@ -26,15 +59,16 @@ def train_one_epoch(model, loader, optimizer, criterion, device):
     for images, labels in loader:
         images = images.to(device)
         labels = labels.to(device)
+        images, labels_a, labels_b, lam = cutmix_data(images, labels, alpha=1.0)
 
         optimizer.zero_grad()
         logits = model(images)
-        loss = criterion(logits, labels)
+        loss = lam * criterion(logits, labels_a) + (1 - lam) * criterion(logits, labels_b)
         loss.backward()
         optimizer.step()
 
         running_loss += loss.item()
-        running_acc += batch_accuracy(logits, labels)
+        running_acc += lam * batch_accuracy(logits, labels_a) + (1 - lam) * batch_accuracy(logits, labels_b)
 
     return {
         "loss": running_loss / len(loader),
