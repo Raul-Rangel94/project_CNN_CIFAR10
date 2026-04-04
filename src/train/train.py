@@ -51,6 +51,21 @@ def cutmix_data(x, y, alpha=1.0):
     return mixed_x, y_a, y_b, lam
 
 
+def mixup_data(x, y, alpha=0.2):
+    if alpha > 0:
+        lam = np.random.beta(alpha, alpha)
+    else:
+        lam = 1
+
+    batch_size = x.size(0)
+    index = torch.randperm(batch_size).to(x.device)
+
+    mixed_x = lam * x + (1 - lam) * x[index]
+    y_a, y_b = y, y[index]
+
+    return mixed_x, y_a, y_b, lam
+
+
 def train_one_epoch(model, loader, optimizer, criterion, device):
     model.train()
     running_loss = 0.0
@@ -59,16 +74,16 @@ def train_one_epoch(model, loader, optimizer, criterion, device):
     for images, labels in loader:
         images = images.to(device)
         labels = labels.to(device)
-        images, labels_a, labels_b, lam = cutmix_data(images, labels, alpha=1.0)
+        mixed_images, labels_a, labels_b, lam = mixup_data(images, labels, alpha=0.2)
 
         optimizer.zero_grad()
-        logits = model(images)
-        loss = lam * criterion(logits, labels_a) + (1 - lam) * criterion(logits, labels_b)
+        logits = model(mixed_images)
+        loss = criterion(logits, labels_a) * lam + criterion(logits, labels_b) * (1 - lam)
         loss.backward()
         optimizer.step()
 
         running_loss += loss.item()
-        running_acc += lam * batch_accuracy(logits, labels_a) + (1 - lam) * batch_accuracy(logits, labels_b)
+        running_acc += batch_accuracy(logits, labels_a)
 
     return {
         "loss": running_loss / len(loader),
